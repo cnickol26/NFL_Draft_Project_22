@@ -1,0 +1,94 @@
+---
+title: "NFL Draft Project"
+author: 'Connor Nickol, email: can2hr@virginia.edu'
+date: "4/26/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidyquant)
+```
+
+```{r}
+college_stats<-read.csv("college_statistics.csv")
+draft<-read.csv("2000-2021 Draft Picks.csv")
+
+```
+
+```{r}
+sum(is.na(college_stats))
+
+college_stats_filter<-college_stats %>% na.omit()
+
+str(college_stats_filter)
+
+stats_14_20<-college_stats_filter %>% group_by(player_name,season) %>% pivot_wider(names_from = statistic,
+                                                                     values_from=value) %>% ungroup() 
+
+test<-stats_14_20 %>% mutate(`Total Tackles`=as.character(`Total Tackles`))
+
+str(test$`Total Tackles`)
+
+```
+
+```{r}
+
+stats_14_20<-df_unlist(stats_14_20)
+```
+
+```{r}
+stats_14_20[stats_14_20=="NULL"]<-0
+```
+
+
+```{r}
+stats_05<-read.csv("player_stats_05.csv")
+stats_06<-read.csv("player_stats_06.csv")
+stats_07<-read.csv("player_stats_07.csv")
+stats_08<-read.csv("player_stats_08.csv")
+stats_09<-read.csv("player_stats_09.csv")
+stats_10<-read.csv("player_stats_10.csv")
+stats_11<-read.csv("player_stats_11.csv")
+stats_12<-read.csv("player_stats_12.csv")
+stats_13<-read.csv("player_stats_13.csv")
+```
+
+```{r}
+stats_05_wr<-stats_05 %>% filter(Position == "WR")
+stats_06_wr<-stats_06 %>% filter(Position == "WR")
+stats_07_wr<-stats_07 %>% filter(Position == "WR")
+stats_08_wr<-stats_08 %>% filter(Position == "WR")
+stats_09_wr<-stats_09 %>% filter(Position == "WR")
+stats_10_wr<-stats_10 %>% filter(Position == "WR")
+stats_11_wr<-stats_11 %>% filter(Position == "WR")
+stats_12_wr<-stats_12 %>% filter(Position == "WR")
+stats_13_wr<-stats_13 %>% filter(Position == "WR")
+```
+
+```{r}
+stats_5_13_wr<-stats_05_wr %>% full_join(stats_06_wr) %>% 
+  full_join(stats_07_wr) %>% full_join(stats_08_wr) %>% 
+  full_join(stats_09_wr) %>% full_join(stats_10_wr) %>% 
+  full_join(stats_11_wr) %>% full_join(stats_12_wr) %>% 
+  full_join(stats_13_wr)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
