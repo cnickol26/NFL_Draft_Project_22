@@ -9,37 +9,32 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(tidyquant)
+library(readr)
+library(purrr)
 ```
+
 
 ```{r}
 college_stats<-read.csv("college_statistics.csv")
 draft<-read.csv("2000-2021 Draft Picks.csv")
-
 ```
 
 ```{r}
 sum(is.na(college_stats))
-
 college_stats_filter<-college_stats %>% na.omit()
-
 str(college_stats_filter)
-
 stats_14_20<-college_stats_filter %>% group_by(player_name,season) %>% pivot_wider(names_from = statistic,
                                                                      values_from=value) %>% ungroup() 
-
 test<-stats_14_20 %>% mutate(`Total Tackles`=as.character(`Total Tackles`))
-
 str(test$`Total Tackles`)
-
 ```
 
 ```{r}
-
-stats_14_20<-df_unlist(stats_14_20)
+#stats_14_20<-df_unlist(stats_14_20)
 ```
 
 ```{r}
-stats_14_20[stats_14_20=="NULL"]<-0
+stats_14_20[is.na(stats_14_20)]<-0
 ```
 
 
@@ -73,22 +68,123 @@ stats_5_13_wr<-stats_05_wr %>% full_join(stats_06_wr) %>%
   full_join(stats_09_wr) %>% full_join(stats_10_wr) %>% 
   full_join(stats_11_wr) %>% full_join(stats_12_wr) %>% 
   full_join(stats_13_wr)
+
+stats_5_13_wr<-stats_5_13_wr %>% select(-c(X,`...1`))
 ```
 
+```{r}
+stats_14_20_wr<-stats_14_20 %>% select(-X) %>% filter(pos_abbr == "WR")
 
+stats_14_20_wr<-stats_14_20_wr %>% select(player_id,player_name,pos_abbr,school,
+                                          school_abbr,season,`Rushing Touchdowns`,
+                                          `Rushing Attempts`,`Rushing Yards`,`Receiving Touchdowns`,
+                                          Receptions,`Receiving Yards`)
+```
 
+```{r}
+stats_14_20_wr_filter<-stats_14_20_wr %>% 
+  group_by(player_id,season,
+           player_name,school,
+           school_abbr) %>% summarise(Rush.TD=sum(`Rushing Touchdowns`),
+                                           Rush.Yard=sum(`Rushing Yards`),
+                                           Rush.Att=sum(`Rushing Attempts`),
+                                           Rec.Yards=sum(`Receiving Yards`),
+                                           Rec.TD=sum(`Receiving Touchdowns`),
+                                           Rec=sum(Receptions))
+```
 
+```{r}
+stats_5_13_wr$player_name<-paste(stats_5_13_wr$First.Name,stats_5_13_wr$Last.Name)
 
+stats_5_13_wr_filter<-stats_5_13_wr %>% select(-c(First.Name,Last.Name,Team.Code,
+                                                  Class,Position,Pass.Att,
+                                                  Pass.Yard,Pass.Comp,Pass.TD,Pass.Int))
+```
 
+```{r}
+stats_13_20_wr<-read.csv("wr_stats_13_20.csv")
 
+stats_13_20_wr_f<-stats_13_20_wr %>% select(-c(season,school))
+```
 
+```{r}
+all_years_wr<-stats_5_13_wr_filter %>% full_join(stats_13_20_wr_f,by=c("Player.Code"="player_id",
+                                                                       "player_name"="player_name",
+                                                                       "Rush.Att"="Rush.Att",
+                                                                       "Rush.TD"="Rush.TD",
+                                                                       "Rush.Yard"="Rush.Yard",
+                                                                       "Rec"="Rec",
+                                                                       "Rec.TD"="Rec.TD",
+                                                                       "Rec.Yards"="Rec.Yards"))
+```
 
+```{r}
+all_years_wr_f<-all_years_wr %>% group_by(player_name) %>% arrange(desc(Rec.Yards)) %>% slice(1)
+```
 
+```{r}
+draft_wr<-draft %>% filter(Position=="WR") %>% filter(Year > 2009) %>% select(-X)
 
+draft_wr_stats<-draft_wr %>% left_join(all_years_wr_f,by=c("Name"="player_name"))
 
+sum(is.na(draft_wr_stats$Rec.Yards))
+```
 
+```{r}
+#draft_wr_stats<-draft_wr_stats %>% na.omit()
 
+write.csv(draft_wr_stats,"draft_wr_stats.csv",row.names=FALSE)
+```
 
+```{r}
+ras_draft_stats<-read.csv("draft_wr_stats.csv")
 
+conferences<-read.csv("cbb21.csv")
 
+conferencesf<-conferences %>% select(TEAM,CONF)
+```
 
+```{r}
+ras_draft_stats_con<-ras_draft_stats %>% left_join(conferencesf,by=c("School"="TEAM"))
+
+write.csv(ras_draft_stats_con,"ras_con.csv",row.names = FALSE)
+```
+
+```{r}
+draft_con<-read.csv("ras_con.csv")
+p5<-c("ACC","SEC","P12","B10","B12")
+
+draft_con$P_five<-ifelse(draft_con$CONF %in% p5,1,0)
+
+draft_f<-draft_con %>% filter(Round<6)
+
+write.csv(draft_f,"draft_filter.csv",row.names = FALSE)
+```
+
+```{r}
+draft_model_wr<-read.csv("draft_filter.csv")
+
+draft_model_wr<-draft_model_wr %>% select(-c(Rush.Att,Rush.TD,Rush.Yard))
+
+draft_model_wr<-draft_model_wr %>% na.omit()
+```
+
+```{r}
+train<-draft_model_wr %>% filter(Year<2020) %>% mutate(P_five=as.factor(P_five))
+test<-draft_model_wr %>% filter(Year > 2019) %>% mutate(P_five=as.factor(P_five))
+```
+
+```{r}
+result<-lm(Overall~Rec.Yards+Rec.TD+Rec+Ras+P_five,data=train)
+test$predict<-round(predict(result,newdata = test))
+test_mse_ln<-mean((test$Overall-test$predict)^2)
+test_mse_ln
+
+summary(result)
+```
+```{r}
+result2<-lm(Round~Rec.Yards+Rec.TD+Rec+Ras+P_five,data=train)
+test$predict2<-round(predict(result2,newdata = test))
+test_mse_ln_round<-mean((test$Round-test$predict2)^2)
+test_mse_ln_round
+```
