@@ -162,20 +162,29 @@ write.csv(draft_f,"draft_filter.csv",row.names = FALSE)
 ```
 
 ```{r}
+ras <- read.csv("WR_RAS.csv")
+ras<- ras %>% select(-Link)
+```
+
+
+```{r}
 draft_model_wr<-read.csv("draft_filter.csv")
 
 draft_model_wr<-draft_model_wr %>% select(-c(Rush.Att,Rush.TD,Rush.Yard))
+draft_model_wr <- draft_model_wr %>% left_join(ras,by=c('Name' = 'Name',
+                                                        'School' = 'College', 
+                                                        'Year' = 'Year'))
 
 draft_model_wr<-draft_model_wr %>% na.omit()
 ```
 
 ```{r}
-train<-draft_model_wr %>% filter(Year<2020) %>% mutate(P_five=as.factor(P_five))
+train<-draft_model_wr %>% filter(Year < 2020) %>% mutate(P_five=as.factor(P_five))
 test<-draft_model_wr %>% filter(Year > 2019) %>% mutate(P_five=as.factor(P_five))
 ```
 
 ```{r}
-result<-lm(Overall~Rec.Yards+Rec.TD+Rec+Ras+P_five,data=train)
+result<-lm(Overall~Rec.Yards+Rec.TD+Rec+RAS+P_five,data=train)
 test$predict<-round(predict(result,newdata = test))
 test_mse_ln<-mean((test$Overall-test$predict)^2)
 test_mse_ln
@@ -183,8 +192,90 @@ test_mse_ln
 summary(result)
 ```
 ```{r}
-result2<-lm(Round~Rec.Yards+Rec.TD+Rec+Ras+P_five,data=train)
+result2<-lm(Round~Rec.Yards+Rec.TD+Rec+RAS+P_five,data=train)
 test$predict2<-round(predict(result2,newdata = test))
 test_mse_ln_round<-mean((test$Round-test$predict2)^2)
 test_mse_ln_round
 ```
+
+```{r}
+yhat<-result$fitted.values 
+res<-result$residuals
+Data<-data.frame(train,yhat,res)
+
+ggplot(Data, aes(x=yhat,y=res))+
+  geom_point()+
+  geom_hline(yintercept=0, color="red")+
+  labs(x="Fitted y",
+       y="Residuals",
+       title="Residual Plot")
+```
+```{r}
+acf(res,main="ACF Plot of Residuals")
+```
+```{r}
+qqnorm(res)
+qqline(res, col="red")
+```
+```{r}
+ggplot(draft_model_wr, aes(x = Overall, y = RAS)) + geom_point() + geom_smooth(method = 'lm', se = FALSE)
+```
+```{r}
+ras_result <- lm(Overall~RAS, data = draft_model_wr)
+yhat<-ras_result$fitted.values 
+res<-ras_result$residuals
+##add to data frame
+Data<-data.frame(draft_model_wr,yhat,res)
+
+ggplot(Data, aes(x=yhat,y=res))+
+  geom_point()+
+  geom_hline(yintercept=0, color="red")+
+  labs(x="Fitted y",
+       y="Residuals",
+       title="Residual Plot")
+```
+```{r}
+wr_scale <- draft_model_wr %>% mutate_at(c('RAS','Rec.Yards','Rec.TD'),~(scale(.)%>% as.vector))
+wr_scale <- wr_scale %>% mutate(avg_stats = (RAS + Rec.Yards + Rec.TD)/3)
+```
+
+```{r}
+ggplot(wr_scale, aes(x = Overall, y = avg_stats)) + geom_point() + geom_smooth(method = 'lm', se = FALSE)
+```
+```{r}
+cor(wr_scale$Round, wr_scale$avg_stats)
+```
+
+```{r}
+result3 <- lm(Overall ~ avg_stats + P_five, data = wr_scale)
+summary(result3)
+```
+```{r}
+wr_scale <- wr_scale %>% mutate(P_five = as.factor(P_five))
+wr_scale$predict<-round(predict(result,newdata = wr_scale))
+test_mse_ln<-mean((wr_scale$Overall-wr_scale$predict)^2)
+test_mse_ln
+```
+```{r}
+train<-wr_scale %>% filter(Year < 2020) %>% mutate(P_five=as.factor(P_five))
+test<-wr_scale %>% filter(Year > 2019) %>% mutate(P_five=as.factor(P_five))
+```
+
+```{r}
+result<-lm(Overall~avg_stats+P_five,data=train)
+test$predict<-round(predict(result,newdata = test))
+test_mse_ln<-mean((test$Overall-test$predict)^2)
+test_mse_ln
+
+summary(result)
+```
+
+```{r}
+result2<-lm(Round~avg_stats+P_five,data=train)
+test$predict<-round(predict(result2,newdata = test))
+test_mse_ln<-mean((test$Round-test$predict)^2)
+test_mse_ln
+
+summary(result)
+```
+
