@@ -20,21 +20,20 @@ draft<-read.csv("2000-2021 Draft Picks.csv")
 ```
 
 ```{r}
+## Going to first look for just wrs
+
+##Filtering out the nas
 sum(is.na(college_stats))
 college_stats_filter<-college_stats %>% na.omit()
 str(college_stats_filter)
-stats_14_20<-college_stats_filter %>% group_by(player_name,season) %>% pivot_wider(names_from = statistic,
-                                                                     values_from=value) %>% ungroup() 
-test<-stats_14_20 %>% mutate(`Total Tackles`=as.character(`Total Tackles`))
-str(test$`Total Tackles`)
-```
 
-```{r}
-#stats_14_20<-df_unlist(stats_14_20)
-```
+##Drop unnecessary columns
+college_stats_filter2 <- college_stats_filter %>% select(-c(alt_player_id,school_primary_color,
+                                                            school_alt_color,active,all_star))
+# Pivoting the data so each season is a row
+stats_14_20 <- college_stats_filter2 %>% distinct() %>% group_by(player_id,player_name,season,
+                                                  pos_abbr,school, school_abbr) %>% pivot_wider(., names_from = statistic, values_from = value) %>% ungroup() 
 
-```{r}
-stats_14_20[is.na(stats_14_20)]<-0
 ```
 
 
@@ -69,11 +68,12 @@ stats_5_13_wr<-stats_05_wr %>% full_join(stats_06_wr) %>%
   full_join(stats_11_wr) %>% full_join(stats_12_wr) %>% 
   full_join(stats_13_wr)
 
-stats_5_13_wr<-stats_5_13_wr %>% select(-c(X,`...1`))
+stats_5_13_wr<-stats_5_13_wr %>% select(-c(X))
 ```
 
 ```{r}
-stats_14_20_wr<-stats_14_20 %>% select(-X) %>% filter(pos_abbr == "WR")
+## Filtering to just wr and wr stats
+stats_14_20_wr<-stats_14_20 %>% filter(pos_abbr == "WR")
 
 stats_14_20_wr<-stats_14_20_wr %>% select(player_id,player_name,pos_abbr,school,
                                           school_abbr,season,`Rushing Touchdowns`,
@@ -82,34 +82,52 @@ stats_14_20_wr<-stats_14_20_wr %>% select(player_id,player_name,pos_abbr,school,
 ```
 
 ```{r}
-stats_14_20_wr_filter<-stats_14_20_wr %>% 
-  group_by(player_id,season,
-           player_name,school,
-           school_abbr) %>% summarise(Rush.TD=sum(`Rushing Touchdowns`),
-                                           Rush.Yard=sum(`Rushing Yards`),
-                                           Rush.Att=sum(`Rushing Attempts`),
-                                           Rec.Yards=sum(`Receiving Yards`),
-                                           Rec.TD=sum(`Receiving Touchdowns`),
-                                           Rec=sum(Receptions))
+## Renaming columns to match older data
+stats_14_20_wr<-stats_14_20_wr  %>% rename(Rush.TD = `Rushing Touchdowns`,
+                                           Rush.Yard = `Rushing Yards`,
+                                           Rush.Att = `Rushing Attempts`,
+                                           Rec.Yards = `Receiving Yards`,
+                                           Rec.TD = `Receiving Touchdowns`,
+                                           Rec = Receptions)
 ```
 
 ```{r}
+## Need to replace Null with 0s
+
+str(stats_14_20_wr)
+
+##Convert to characters to replace
+stats_14_20_wr <- stats_14_20_wr %>%
+  mutate(across(everything(), as.character))
+
+#Replace with 0s
+stats_14_20_wr[stats_14_20_wr == "NULL"] <- '0'
+
+#Convert back to numeric columns
+stats_14_20_wr <- stats_14_20_wr %>% mutate(Rush.TD = as.numeric(Rush.TD),
+                                            Rush.Yard = as.numeric(Rush.Yard),
+                                            Rush.Att = as.numeric(Rush.Att),
+                                            Rec.TD = as.numeric(Rec.TD),
+                                            Rec.Yards = as.numeric(Rec.Yards),
+                                            Rec = as.numeric(Rec),
+                                            player_id = as.numeric(player_id))
+```
+
+
+```{r}
+#Fixing player names and selecting relevant columns
 stats_5_13_wr$player_name<-paste(stats_5_13_wr$First.Name,stats_5_13_wr$Last.Name)
 
 stats_5_13_wr_filter<-stats_5_13_wr %>% select(-c(First.Name,Last.Name,Team.Code,
-                                                  Class,Position,Pass.Att,
+                                                  Class,Pass.Att,
                                                   Pass.Yard,Pass.Comp,Pass.TD,Pass.Int))
 ```
 
 ```{r}
-stats_13_20_wr<-read.csv("wr_stats_13_20.csv")
-
-stats_13_20_wr_f<-stats_13_20_wr %>% select(-c(season,school))
-```
-
-```{r}
-all_years_wr<-stats_5_13_wr_filter %>% full_join(stats_13_20_wr_f,by=c("Player.Code"="player_id",
-                                                                       "player_name"="player_name",
+## Joining data together
+all_years_wr<-stats_5_13_wr_filter %>% full_join(stats_14_20_wr,by=c("Player.Code"="player_id",
+                                                                     "Position" = "pos_abbr",
+                                                                      "player_name"="player_name",
                                                                        "Rush.Att"="Rush.Att",
                                                                        "Rush.TD"="Rush.TD",
                                                                        "Rush.Yard"="Rush.Yard",
@@ -119,25 +137,29 @@ all_years_wr<-stats_5_13_wr_filter %>% full_join(stats_13_20_wr_f,by=c("Player.C
 ```
 
 ```{r}
+#Selecting each receivers best yards season
 all_years_wr_f<-all_years_wr %>% group_by(player_name) %>% arrange(desc(Rec.Yards)) %>% slice(1)
 ```
 
 ```{r}
-draft_wr<-draft %>% filter(Position=="WR") %>% filter(Year > 2009) %>% select(-X)
+## Only going to use players after 2009
 
-draft_wr_stats<-draft_wr %>% left_join(all_years_wr_f,by=c("Name"="player_name"))
+draft_wr<-draft %>% filter(Position=="WR") %>% filter(Year > 2009) 
 
+draft_wr_stats <- draft_wr %>% left_join(all_years_wr_f,by=c("Name" = "player_name",
+                                                           "Position" = "Position")) %>% 
+  select(-c(school, school_abbr, season))
+
+# Going to fill in the NAs by hand
 sum(is.na(draft_wr_stats$Rec.Yards))
 ```
 
 ```{r}
-#draft_wr_stats<-draft_wr_stats %>% na.omit()
-
-write.csv(draft_wr_stats,"draft_wr_stats.csv",row.names=FALSE)
+#write.csv(draft_wr_stats,"draft_wr_stats.csv",row.names=FALSE)
 ```
 
 ```{r}
-ras_draft_stats<-read.csv("draft_wr_stats.csv")
+draft_stats<-read.csv("draft_wr_stats.csv")
 
 conferences<-read.csv("cbb21.csv")
 
@@ -145,32 +167,24 @@ conferencesf<-conferences %>% select(TEAM,CONF)
 ```
 
 ```{r}
-ras_draft_stats_con<-ras_draft_stats %>% left_join(conferencesf,by=c("School"="TEAM"))
-
-write.csv(ras_draft_stats_con,"ras_con.csv",row.names = FALSE)
+draft_con<-draft_wr_stats %>% left_join(conferencesf,by=c("School"="TEAM"))
 ```
 
 ```{r}
-draft_con<-read.csv("ras_con.csv")
 p5<-c("ACC","SEC","P12","B10","B12")
 
 draft_con$P_five<-ifelse(draft_con$CONF %in% p5,1,0)
-
-draft_f<-draft_con %>% filter(Round<6)
-
-write.csv(draft_f,"draft_filter.csv",row.names = FALSE)
 ```
 
 ```{r}
-ras <- read.csv("WR_RAS.csv")
+ras <- read.csv("wr_ras.csv")
+
 ras<- ras %>% select(-Link)
 ```
 
 
 ```{r}
-draft_model_wr<-read.csv("draft_filter.csv")
-
-draft_model_wr<-draft_model_wr %>% select(-c(Rush.Att,Rush.TD,Rush.Yard))
+draft_model_wr<-draft_con %>% select(-c(Rush.Att,Rush.TD,Rush.Yard))
 draft_model_wr <- draft_model_wr %>% left_join(ras,by=c('Name' = 'Name',
                                                         'School' = 'College', 
                                                         'Year' = 'Year'))
@@ -210,16 +224,20 @@ ggplot(Data, aes(x=yhat,y=res))+
        y="Residuals",
        title="Residual Plot")
 ```
+
 ```{r}
 acf(res,main="ACF Plot of Residuals")
 ```
+
 ```{r}
 qqnorm(res)
 qqline(res, col="red")
 ```
+
 ```{r}
 ggplot(draft_model_wr, aes(x = Overall, y = RAS)) + geom_point() + geom_smooth(method = 'lm', se = FALSE)
 ```
+
 ```{r}
 ras_result <- lm(Overall~RAS, data = draft_model_wr)
 yhat<-ras_result$fitted.values 
@@ -234,6 +252,7 @@ ggplot(Data, aes(x=yhat,y=res))+
        y="Residuals",
        title="Residual Plot")
 ```
+
 ```{r}
 wr_scale <- draft_model_wr %>% mutate_at(c('RAS','Rec.Yards','Rec.TD'),~(scale(.)%>% as.vector))
 wr_scale <- wr_scale %>% mutate(avg_stats = (RAS + Rec.Yards + Rec.TD)/3)
@@ -242,6 +261,7 @@ wr_scale <- wr_scale %>% mutate(avg_stats = (RAS + Rec.Yards + Rec.TD)/3)
 ```{r}
 ggplot(wr_scale, aes(x = Overall, y = avg_stats)) + geom_point() + geom_smooth(method = 'lm', se = FALSE)
 ```
+
 ```{r}
 cor(wr_scale$Round, wr_scale$avg_stats)
 ```
@@ -250,12 +270,14 @@ cor(wr_scale$Round, wr_scale$avg_stats)
 result3 <- lm(Overall ~ avg_stats + P_five, data = wr_scale)
 summary(result3)
 ```
+
 ```{r}
 wr_scale <- wr_scale %>% mutate(P_five = as.factor(P_five))
 wr_scale$predict<-round(predict(result,newdata = wr_scale))
 test_mse_ln<-mean((wr_scale$Overall-wr_scale$predict)^2)
 test_mse_ln
 ```
+
 ```{r}
 train<-wr_scale %>% filter(Year < 2020) %>% mutate(P_five=as.factor(P_five))
 test<-wr_scale %>% filter(Year > 2019) %>% mutate(P_five=as.factor(P_five))
