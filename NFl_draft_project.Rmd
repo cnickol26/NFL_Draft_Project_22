@@ -196,6 +196,22 @@ draft_model_wr<-draft_model_wr %>% na.omit()
 ```
 
 ```{r}
+## Want to see averages for each season
+draft_model_wr %>% group_by(Year) %>% summarise(avg_picked = mean(Overall),
+                                                avg_yards = mean(Rec.Yards),
+                                                avg_td = mean(Rec.TD),
+                                                avg_ras = mean(RAS))
+```
+May want to drop 2015, 2016, 2017, 2019 as they seem to be outlying years
+
+```{r}
+wr_no_outliers <- draft_model_wr %>% filter(!(Year %in% c(2015, 2016, 2017, 2019)))
+
+write.csv(wr_no_outliers,"filtered_draft.csv", row.names = FALSE)
+```
+
+
+```{r}
 ## Looking at the distribution of where guys are picked
 ggplot(draft_model_wr, aes(x = Overall)) + geom_histogram() 
 ```

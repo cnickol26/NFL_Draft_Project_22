@@ -1,0 +1,36 @@
+---
+title: "WR Draft Project"
+author: 'Connor Nickol, email: can2hr@virginia.edu'
+date: "2023-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+```{r}
+## Using a subsetted dataset with the yards per game variable
+wr <- read.csv("filtered_draft.csv")
+
+wr <- wr %>% mutate(yds_game = Rec.Yards/Games,
+                    yds_game = scale(yds_game),
+                    Rec.TD = scale(Rec.TD),
+                    RAS = scale(RAS))
+
+wr_model <- wr %>% select(Overall, yds_game, Rec.TD, RAS, P_five, Year) %>% mutate(P_five = as.factor(P_five))
+
+train <- wr_model %>% filter(Year < 2021) %>% select(-Year)
+test <- wr_model %>% filter(Year >= 2021) %>% select(-Year)
+
+model <- lm(Overall ~., data = train)
+
+summary(model)
+```
+```{r}
+test$predict<-round(predict(model,newdata = test))
+test_mse_ln<-mean((test$Overall-test$predict)^2)
+test_mse_ln
+```
+
